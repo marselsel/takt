@@ -1,0 +1,12 @@
+{
+  "name": "TAKT — Berlin Transfer Timer",
+  "short_name": "TAKT",
+  "description": "See which tram, U-Bahn or bus to catch for the shortest wait at your transfer station — live BVG/VBB data.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0b0e16",
+  "theme_color": "#0b0e16",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
