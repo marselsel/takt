@@ -2,6 +2,10 @@
 
 **Every ride drawn on one clock — the gap is your wait.**
 
+### [▶ Live demo](https://marselsel.github.io/takt/)
+
+<img src="screenshot.png" width="400" alt="TAKT showing upcoming M10 trams with their transfer waits to the U5 — the zero-minute-wait ride is highlighted as SHORTEST WAIT">
+
 TAKT answers a question every Berlin commuter knows: *which tram should I catch so I'm not
 standing on the U-Bahn platform for five minutes?* It pulls live BVG/VBB real-time data and
 draws every upcoming option as a strand on a shared time axis — ride, transfer walk, **wait

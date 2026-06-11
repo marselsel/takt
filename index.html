@@ -147,8 +147,9 @@
   .relmin { font-size: 12px; color: var(--muted); }
   .relmin.urgent {
     color: #161300; background: var(--yellow); font-weight: 700; padding: 2px 8px; border-radius: 999px;
-    animation: blink 1.2s steps(1) infinite;
+    white-space: nowrap; animation: urgentpulse 1.2s ease-in-out infinite;
   }
+  @keyframes urgentpulse { 50% { opacity: .55; } }
   .strand { position: relative; height: 42px; margin-top: 8px; }
   .seg { position: absolute; top: 14px; height: 8px; border-radius: 4px; }
   .seg.walkseg { top: 17px; height: 0; border-top: 3px dotted #4a5570; border-radius: 0; }
@@ -352,7 +353,8 @@ function loadConfig() {
   const m = location.hash.match(/#cfg=([A-Za-z0-9\-_]+)/);
   if (m) {
     try {
-      const cfg = JSON.parse(atob(m[1].replace(/-/g, '+').replace(/_/g, '/')));
+      const bytes = Uint8Array.from(atob(m[1].replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+      const cfg = JSON.parse(new TextDecoder().decode(bytes));
       if (cfg.a && cfg.via && cfg.b) {
         localStorage.setItem(LS_KEY, JSON.stringify(cfg));
         history.replaceState(null, '', location.pathname + location.search);
@@ -528,7 +530,8 @@ function renderBoard(data) {
 
   // —— ruler ——
   const spanMin = span / 60000;
-  const step = spanMin > 75 ? 15 : spanMin > 45 ? 10 : 5;
+  const pxPerMin = (W - 2 * pad) / spanMin;
+  const step = [5, 10, 15, 20, 30, 60].find(s => s * pxPerMin >= 48) || 60;
   let ticks = '';
   const first = new Date(Math.ceil(tMin / (step * 60000)) * step * 60000);
   for (let t = first.getTime(); t < tMax; t += step * 60000) {
@@ -742,7 +745,8 @@ $('#btnSettings').addEventListener('click', openSettings);
 $('#btnShare').addEventListener('click', async () => {
   const cfg = currentEdit();
   if (!cfg.a || !cfg.via || !cfg.b) { alert('Pick all three stops first.'); return; }
-  const b64 = btoa(JSON.stringify(cfg)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const b64 = btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(cfg))))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   const link = location.origin + location.pathname + '#cfg=' + b64;
   try { await navigator.clipboard.writeText(link); alert('Share link copied!'); }
   catch (e) { prompt('Copy this link:', link); }
