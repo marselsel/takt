@@ -137,8 +137,12 @@
   .ruler {
     /* left/right margins line the ruler up with the strand column inside the cards:
        16px card padding + 1px border + 64px wait column + 14px gap = 95 / 17 */
-    position: relative; height: 30px; margin: 2px 17px 10px 95px;
+    position: relative; height: 38px; margin: 2px 17px 10px 95px;
     border-bottom: 1px solid var(--line);
+  }
+  .rcap {
+    position: absolute; top: 0; left: 0;
+    font-size: 9px; font-weight: 700; letter-spacing: .14em; color: var(--muted);
   }
   .tick {
     position: absolute; bottom: 0; transform: translateX(-50%);
@@ -209,6 +213,10 @@
   .nowline {
     position: absolute; top: 2px; bottom: 2px; width: 0; z-index: 1;
     border-left: 1px dashed rgba(240,215,34,.4);
+  }
+  .gridline {
+    position: absolute; top: 0; bottom: 0; width: 0;
+    border-left: 1px solid rgba(255,255,255,.05);
   }
   .conlabel {
     position: absolute; top: 28px; z-index: 2; white-space: nowrap;
@@ -640,14 +648,18 @@ function renderBoard(data) {
   const spanMin = span / 60000;
   const pxPerMin = (W - 2 * pad) / spanMin;
   const step = [5, 10, 15, 20, 30, 60].find(s => s * pxPerMin >= 48) || 60;
-  let ticks = '';
+  let ticks = '<div class="rcap">TIMELINE →</div>';
+  const tickXs = [];
   const first = new Date(Math.ceil(tMin / (step * 60000)) * step * 60000);
   for (let t = first.getTime(); t < tMax; t += step * 60000) {
-    ticks += `<div class="tick" style="left:${x(t).toFixed(1)}px">${fmtTime(new Date(t).toISOString())}</div>`;
+    const tx = x(t);
+    tickXs.push(tx);
+    ticks += `<div class="tick" style="left:${tx.toFixed(1)}px">${fmtTime(new Date(t).toISOString())}</div>`;
   }
   ticks += `<div class="nowflag" data-now style="left:${x(now).toFixed(1)}px">NOW</div>`;
   ruler.innerHTML = ticks;
   ruler.style.display = '';
+  const gridHtml = tickXs.map(tx => `<div class="gridline" style="left:${tx.toFixed(1)}px"></div>`).join('');
 
   // —— cards: chronological; the shortest wait (earliest on tie) is highlighted in place ——
   let bestRow = null;
@@ -711,7 +723,7 @@ function renderBoard(data) {
             ${r.cancelled ? '<span class="cancelflag">CANCELLED</span>' : relMinHtml(r)}
             ${r.arrTo && !r.cancelled ? `<span class="arr">→ ${fmtTime(r.arrTo)}${r.doorArr ? ` · ⌂ ${fmtTime(r.doorArr)}` : ''}</span>` : ''}
           </div>
-          ${strand ? `<div class="strand">${strand}</div>` : ''}
+          ${strand ? `<div class="strand">${gridHtml}${strand}</div>` : ''}
           ${foot ? `<div class="cardfoot">${foot}</div>` : ''}
         </div>
       </article>`;
