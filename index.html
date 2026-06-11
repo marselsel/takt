@@ -89,6 +89,49 @@
   }
   .swap:active { transform: rotate(180deg) scale(.94); }
 
+  /* ———— disruption alerts ———— */
+  .alert {
+    background: rgba(255,176,32,.08); border: 1px solid rgba(255,176,32,.35);
+    border-radius: 12px; padding: 9px 13px; margin-bottom: 10px;
+    font-size: 12.5px; color: var(--amber); line-height: 1.5;
+  }
+  .alert summary { cursor: pointer; font-weight: 500; list-style: none; }
+  .alert summary::-webkit-details-marker { display: none; }
+  .alert p { color: var(--muted); margin-top: 7px; }
+
+  /* ———— live radar ———— */
+  .radar {
+    background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+    padding: 12px 16px 4px; margin-bottom: 12px;
+  }
+  .radar-head {
+    font-size: 9.5px; font-weight: 700; letter-spacing: .14em; color: var(--muted);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .rdot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(61,220,132,.5); } 60% { box-shadow: 0 0 0 6px rgba(61,220,132,0); } }
+  .radar-track { position: relative; height: 58px; margin-top: 8px; }
+  .rrail { position: absolute; left: 0; right: 0; top: 27px; height: 2px; background: var(--line); border-radius: 1px; }
+  .rtick { position: absolute; top: 23px; width: 2px; height: 10px; background: #39446a; transform: translateX(-50%); }
+  .rtick.major { background: var(--text); height: 12px; top: 22px; }
+  .rtick.via2 { background: var(--yellow); }
+  .rlbl {
+    position: absolute; top: 38px; transform: translateX(-50%);
+    font-size: 9.5px; color: var(--muted); white-space: nowrap; max-width: 40%;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .rlbl.first { transform: translateX(-4px); }
+  .rlbl.last { transform: translateX(calc(-100% + 4px)); }
+  .radar-dot {
+    position: absolute; top: 21px; width: 13px; height: 13px; border-radius: 50%;
+    border: 2px solid #fff; transform: translateX(-50%); z-index: 2;
+    transition: left 2.5s linear; box-shadow: 0 0 10px rgba(0,0,0,.5);
+  }
+  .radar-dot .wl {
+    position: absolute; top: -16px; left: 50%; transform: translateX(-50%);
+    font-size: 10px; font-weight: 700; font-family: var(--mono);
+  }
+
   /* ———— time ruler ———— */
   .ruler {
     /* left/right margins line the ruler up with the strand column inside the cards:
@@ -235,8 +278,8 @@
   footer a { color: var(--muted); }
 
   @media (prefers-reduced-motion: reduce) {
-    .blink, .relmin.urgent, .skel::after { animation: none !important; }
-    .card, .swap, .iconbtn { transition: none; }
+    .blink, .relmin.urgent, .skel::after, .rdot { animation: none !important; }
+    .card, .swap, .iconbtn, .radar-dot { transition: none; }
   }
 </style>
 </head>
@@ -303,6 +346,11 @@
         <div class="via">via <b id="lblVia"></b></div>
       </div>
       <button class="swap" id="btnSwap" title="Swap direction" aria-label="Swap direction">⇄</button>
+    </div>
+    <div id="alerts" style="display:none"></div>
+    <div id="radar" class="radar" style="display:none">
+      <div class="radar-head"><span class="rdot"></span> LIVE — YOUR RIDES ON THE TRACKS</div>
+      <div class="radar-track" id="radarTrack"></div>
     </div>
     <div id="ruler" class="ruler" style="display:none"></div>
     <div id="board" aria-live="polite"></div>
@@ -410,9 +458,9 @@ async function fetchBoard() {
   const walkT = config.walkT;
 
   const [dep1, arrVia, dep2, arrTo] = await Promise.all([
-    api(`/stops/${from.id}/departures`, { direction: via.id, duration: 70, remarks: false, results: 15 }),
+    api(`/stops/${from.id}/departures`, { direction: via.id, duration: 70, remarks: true, results: 15 }),
     api(`/stops/${via.id}/arrivals`,    { duration: 110, remarks: false, results: 100 }),
-    api(`/stops/${via.id}/departures`,  { direction: to.id, duration: 130, remarks: false, results: 40 }),
+    api(`/stops/${via.id}/departures`,  { direction: to.id, duration: 130, remarks: true, results: 40 }),
     api(`/stops/${to.id}/arrivals`,     { duration: 170, remarks: false, results: 120 }),
   ]);
 
@@ -462,7 +510,18 @@ async function fetchBoard() {
     row.leaveBy = walkStart > 0 && whenOf(d) ? addMin(whenOf(d), -walkStart) : null;
     rows.push(row);
   }
-  return { rows, from, to, via, walkT };
+
+  // disruption warnings on either leg (dedup; hints like "bicycle conveyance" are skipped)
+  const warn = new Map();
+  const collect = list => {
+    for (const it of list || [])
+      for (const rm of it.remarks || [])
+        if (rm.type === 'warning') warn.set(rm.id ?? rm.summary ?? rm.text, rm);
+  };
+  collect(leg1);
+  collect(rows.map(r => r.conn).filter(Boolean));
+
+  return { rows, from, to, via, walkT, warnings: [...warn.values()].slice(0, 3) };
 }
 
 /* ---------------- rendering ---------------- */
@@ -498,6 +557,19 @@ function renderBoard(data) {
   $('#lblFrom').textContent = shortName(data.from.name);
   $('#lblTo').textContent = shortName(data.to.name);
   $('#lblVia').textContent = shortName(data.via.name);
+
+  const al = $('#alerts');
+  if (data.warnings?.length) {
+    al.innerHTML = data.warnings.map(w => {
+      const strip = s => esc(String(s || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim());
+      const sum = strip(w.summary) || 'Service disruption';
+      const txt = strip(w.text).slice(0, 600);
+      return txt && txt !== sum
+        ? `<details class="alert"><summary>⚠ ${sum}</summary><p>${txt}</p></details>`
+        : `<div class="alert">⚠ ${sum}</div>`;
+    }).join('');
+    al.style.display = '';
+  } else { al.style.display = 'none'; }
 
   const board = $('#board');
   const ruler = $('#ruler');
@@ -628,6 +700,126 @@ function showSkeleton() {
   $('#board').innerHTML = '<div class="skel"></div>'.repeat(4);
 }
 
+/* ---------------- live vehicle radar ----------------
+   The first leg's route (a few stops upstream of the start stop, through to the
+   transfer station) becomes a schematic track; /radar GPS positions of exactly
+   the trips shown on the board are projected onto it, labelled with their wait.
+------------------------------------------------------ */
+let corridor = null, corridorKey = '', radarBusy = false;
+
+function resetRadar() {
+  corridor = null; corridorKey = '';
+  $('#radarTrack').innerHTML = '';
+  $('#radar').style.display = 'none';
+}
+
+async function ensureCorridor(data) {
+  const first = data.rows.find(r => !r.cancelled);
+  if (!first) { resetRadar(); return; }
+  const key = [data.from.id, data.via.id, first.dep.line?.name].join('|');
+  if (corridorKey === key && corridor) return;
+  try {
+    const t = await api(`/trips/${encodeURIComponent(first.dep.tripId)}`,
+      { lineName: first.dep.line?.name || '', stopovers: true, remarks: false });
+    const sos = (t.trip?.stopovers || []).filter(s => s.stop?.location);
+    const idx = id => sos.findIndex(s => s.stop.id === id || s.stop.station?.id === id);
+    const iFrom = idx(data.from.id), iVia = idx(data.via.id);
+    if (iFrom < 0 || iVia < 0 || iVia <= iFrom) { resetRadar(); return; }
+    const off = Math.max(0, iFrom - 5);
+    const k = Math.cos(sos[iFrom].stop.location.latitude * Math.PI / 180);
+    const stops = sos.slice(off, iVia + 1).map((s, i) => ({
+      name: shortName(s.stop.name),
+      lat: s.stop.location.latitude, lng: s.stop.location.longitude,
+      isFrom: off + i === iFrom, cum: 0,
+    }));
+    for (let i = 1; i < stops.length; i++) {
+      const p = stops[i - 1], q = stops[i];
+      q.cum = p.cum + Math.hypot((q.lng - p.lng) * k, q.lat - p.lat);
+    }
+    const total = stops[stops.length - 1].cum || 1;
+    for (const s of stops) s.frac = s.cum / total;
+    corridor = { stops, k };
+    corridorKey = key;
+    renderRadarTrack();
+    pollRadar();
+  } catch (e) { /* no corridor — panel stays hidden */ }
+}
+
+function renderRadarTrack() {
+  const st = corridor.stops;
+  let html = '<div class="rrail"></div>';
+  st.forEach((s, i) => {
+    const isVia = i === st.length - 1;
+    const left = (s.frac * 100).toFixed(2) + '%';
+    html += `<div class="rtick ${s.isFrom || isVia ? 'major' : ''} ${isVia ? 'via2' : ''}" style="left:${left}"></div>`;
+    if (i === 0 || s.isFrom || isVia) {
+      const cls = i === 0 ? 'first' : isVia ? 'last' : '';
+      html += `<div class="rlbl ${cls}" style="left:${left}">${esc(s.name)}</div>`;
+    }
+  });
+  $('#radarTrack').innerHTML = html;
+  $('#radar').style.display = '';
+}
+
+function projFrac(lat, lng) {
+  const st = corridor.stops, k = corridor.k;
+  let bd = Infinity, bf = 0;
+  for (let i = 0; i < st.length - 1; i++) {
+    const ax = st[i].lng * k, ay = st[i].lat, bx = st[i + 1].lng * k, by = st[i + 1].lat;
+    const px = lng * k, py = lat;
+    const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy || 1e-12;
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / L2));
+    const d = Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+    if (d < bd) { bd = d; bf = st[i].frac + t * (st[i + 1].frac - st[i].frac); }
+  }
+  return bd * 111000 <= 650 ? bf : null;   // ignore vehicles > ~650 m off the corridor
+}
+
+async function pollRadar() {
+  if (!corridor || !lastData || radarBusy || document.visibilityState !== 'visible') return;
+  radarBusy = true;
+  try {
+    const lats = corridor.stops.map(s => s.lat), lngs = corridor.stops.map(s => s.lng);
+    const m = 0.004;
+    const res = await api('/radar', {
+      north: (Math.max(...lats) + m).toFixed(5), south: (Math.min(...lats) - m).toFixed(5),
+      west: (Math.min(...lngs) - m).toFixed(5), east: (Math.max(...lngs) + m).toFixed(5),
+      results: 80, duration: 0, frames: 0, polylines: false,
+    });
+    const wanted = new Map();
+    for (const r of lastData.rows) if (!r.cancelled) wanted.set(r.dep.tripId, r);
+    const track = $('#radarTrack');
+    const seen = new Set();
+    for (const mv of (res.movements || [])) {
+      const row = wanted.get(mv.tripId);
+      if (!row || !mv.location) continue;
+      const frac = projFrac(mv.location.latitude, mv.location.longitude);
+      if (frac == null) continue;
+      seen.add(mv.tripId);
+      let dot = track.querySelector(`.radar-dot[data-trip="${mv.tripId}"]`);
+      if (!dot) {
+        dot = document.createElement('div');
+        dot.className = 'radar-dot';
+        dot.setAttribute('data-trip', mv.tripId);
+        dot.innerHTML = '<span class="wl"></span>';
+        track.appendChild(dot);
+      }
+      dot.style.left = (frac * 100).toFixed(2) + '%';
+      dot.style.background = lineColor(mv.line);
+      dot.title = `${mv.line?.name || ''} — departs ${fmtTime(whenOf(row.dep))}, ${row.waitMin != null ? row.waitMin + '′ wait' : 'wait unknown'}`;
+      const wl = dot.querySelector('.wl');
+      if (wl && row.waitMin != null) {
+        wl.textContent = row.waitMin + '′';
+        wl.className = 'wl wtxt-' + waitClass(row.waitMin).slice(2);
+      }
+    }
+    for (const stale of track.querySelectorAll('.radar-dot')) {
+      if (!seen.has(stale.getAttribute('data-trip'))) stale.remove();
+    }
+  } catch (e) { /* transient radar errors are fine */ }
+  finally { radarBusy = false; }
+}
+
 async function refresh() {
   if (loading || !config) return;
   loading = true;
@@ -636,6 +828,8 @@ async function refresh() {
     const data = await fetchBoard();
     renderBoard(data);
     lastUpdated = new Date();
+    ensureCorridor(data);
+    pollRadar();
   } catch (e) {
     $('#ruler').style.display = 'none';
     $('#board').innerHTML = `<div class="msg error">Could not load live data.<br>${esc(e.message)}
@@ -738,6 +932,7 @@ $('#btnSave').addEventListener('click', () => {
   if (cfg.a.id === cfg.via.id || cfg.via.id === cfg.b.id) { alert('Start, transfer and destination must be different stops.'); return; }
   saveConfig(cfg);
   hadFirstPaint = false;
+  resetRadar();
   closeSettings();
 });
 $('#btnCancel').addEventListener('click', closeSettings);
@@ -755,6 +950,7 @@ $('#btnSwap').addEventListener('click', () => {
   reversed = !reversed;
   localStorage.setItem(LS_DIR, reversed ? '1' : '0');
   hadFirstPaint = false;
+  resetRadar();
   refresh();
 });
 $('#btnRefresh').addEventListener('click', refresh);
@@ -778,6 +974,7 @@ window.addEventListener('resize', () => {
     refresh();
   }
   setInterval(refresh, 60000);
+  setInterval(pollRadar, 15000);
   setInterval(updateNowMarkers, 8000);
   setInterval(tickUpdated, 5000);
 })();

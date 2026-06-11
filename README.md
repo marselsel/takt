@@ -23,6 +23,11 @@ a glance.
   including your walk times
 - 📡 **Real-time** — delays, cancellations, and night-line fallbacks (when the U-Bahn stops,
   TAKT correctly offers the night bus); auto-refresh every 60 s and on screen wake
+- 🛰 **Live vehicle radar** — the exact rides on your board appear as moving dots on a
+  schematic of your first leg (real GPS via the HAFAS `/radar` endpoint, polled every 15 s),
+  each labelled with the wait it will give you at the transfer
+- ⚠️ **Disruption alerts** — line warnings affecting either leg show up as an expandable
+  amber banner above the board
 - 🔁 **Both directions** — one tap swaps the commute home
 - 🌍 **Fully generic** — any start/transfer/destination stop in the VBB network (tram, U-Bahn,
   S-Bahn, bus, ferry, regional) via live autocomplete; routes are shareable as links
@@ -58,6 +63,11 @@ well within its 100 req/min limit):
 All four run in parallel; real-time `when` is preferred, planned times are the fallback.
 The timeline scale is computed per refresh, re-laid-out on resize, and the NOW markers
 advance between refreshes.
+
+The live radar additionally fetches the first leg's stop sequence once (`GET /trips/{tripId}`)
+to build a geographic corridor, then polls `GET /radar` (bounding box around the corridor)
+every 15 s and projects each matching vehicle's GPS position onto the schematic track —
+only trips that are actually on your board are shown.
 
 ---
 
