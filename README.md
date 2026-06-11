@@ -20,12 +20,13 @@ a glance.
   ("take this one"); every other option shows its wait as a big color-coded stat
   (green ≤ 2 min, amber 3–4, red ≥ 5) for at-a-glance comparison
 - 🚪 **Door-to-door** — "leave by", a live *leave now!* nudge, and arrival "at the door"
-  including your walk times
+  including your walk times — configured separately for the outbound and the return trip
+  (the way back rarely mirrors the way out)
 - 📡 **Real-time** — delays, cancellations, and night-line fallbacks (when the U-Bahn stops,
   TAKT correctly offers the night bus); auto-refresh every 60 s and on screen wake
 - 🛰 **Live vehicle radar** — the exact rides on your board appear as moving dots on a
-  schematic of your first leg (real GPS via the HAFAS `/radar` endpoint, polled every 15 s),
-  each labelled with the wait it will give you at the transfer
+  schematic of the entire first-leg route (real GPS via the HAFAS `/radar` endpoint, polled
+  every 15 s), each labelled with the wait it will give you at the transfer
 - ⚠️ **Disruption alerts** — line warnings affecting either leg show up as an expandable
   amber banner above the board
 - 🔁 **Both directions** — one tap swaps the commute home

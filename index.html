@@ -131,6 +131,7 @@
     position: absolute; top: -16px; left: 50%; transform: translateX(-50%);
     font-size: 10px; font-weight: 700; font-family: var(--mono);
   }
+  .radar-dot.below .wl { top: auto; bottom: -17px; }
 
   /* ———— time ruler ———— */
   .ruler {
@@ -265,6 +266,9 @@
   .suggest div { padding: 10px 13px; font-size: 14px; cursor: pointer; border-bottom: 1px solid var(--line); }
   .suggest div:last-child { border-bottom: none; }
   .suggest div:hover { background: var(--card); }
+  .walksec { margin-top: 4px; }
+  .walksec h3 { font-size: 12px; font-weight: 600; margin-bottom: 9px; letter-spacing: .02em; }
+  .walksec h3 span { color: var(--muted); font-weight: 400; font-size: 11px; }
   .walkgrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
   .walkgrid input { text-align: center; font-family: var(--mono); }
   .btnrow { display: flex; gap: 10px; margin-top: 8px; }
@@ -317,18 +321,38 @@
         <input type="text" autocomplete="off" placeholder="e.g. U Museumsinsel">
         <div class="picked"></div>
       </div>
-      <div class="walkgrid">
-        <div class="field">
-          <label>Door ↔ start (min)</label>
-          <input type="number" id="walkA" min="0" max="60" value="5">
+      <div class="walksec">
+        <h3>Walking minutes — outbound <span>(start → destination)</span></h3>
+        <div class="walkgrid">
+          <div class="field">
+            <label>Door → start stop</label>
+            <input type="number" id="outStart" min="0" max="60" value="5">
+          </div>
+          <div class="field">
+            <label>Transfer</label>
+            <input type="number" id="outXfer" min="0" max="60" value="1">
+          </div>
+          <div class="field">
+            <label>Stop → dest. door</label>
+            <input type="number" id="outEnd" min="0" max="60" value="0">
+          </div>
         </div>
-        <div class="field">
-          <label>Transfer walk (min)</label>
-          <input type="number" id="walkT" min="0" max="60" value="1">
-        </div>
-        <div class="field">
-          <label>Dest ↔ stop (min)</label>
-          <input type="number" id="walkB" min="0" max="60" value="0">
+      </div>
+      <div class="walksec">
+        <h3>Walking minutes — return <span>(destination → start)</span></h3>
+        <div class="walkgrid">
+          <div class="field">
+            <label>Door → dest. stop</label>
+            <input type="number" id="retStart" min="0" max="60" value="0">
+          </div>
+          <div class="field">
+            <label>Transfer</label>
+            <input type="number" id="retXfer" min="0" max="60" value="1">
+          </div>
+          <div class="field">
+            <label>Stop → home door</label>
+            <input type="number" id="retEnd" min="0" max="60" value="5">
+          </div>
         </div>
       </div>
       <div class="btnrow">
@@ -375,8 +399,21 @@ const PRESET = {
   a:   { id: '900120515', name: 'Straßmannstr.' },
   via: { id: '900120008', name: 'U Frankfurter Tor' },
   b:   { id: '900100537', name: 'U Museumsinsel' },
-  walkA: 5, walkT: 1, walkB: 0
+  out: { start: 5, transfer: 1, end: 0 },   // walking minutes A → B
+  ret: { start: 0, transfer: 1, end: 5 },   // walking minutes B → A
 };
+
+// older configs/share links had one shared walk per stop (walkA/walkT/walkB)
+function normalizeConfig(c) {
+  if (c && !c.out) {
+    const wa = c.walkA ?? 5, wt = c.walkT ?? 1, wb = c.walkB ?? 0;
+    c.out = { start: wa, transfer: wt, end: wb };
+    c.ret = { start: wb, transfer: wt, end: wa };
+    delete c.walkA; delete c.walkT; delete c.walkB;
+  }
+  if (c && !c.ret) c.ret = { ...c.out };
+  return c;
+}
 
 // Official-ish Berlin line colours; fall back to product colour
 const LINE_COLORS = {
@@ -402,7 +439,7 @@ function loadConfig() {
   if (m) {
     try {
       const bytes = Uint8Array.from(atob(m[1].replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
-      const cfg = JSON.parse(new TextDecoder().decode(bytes));
+      const cfg = normalizeConfig(JSON.parse(new TextDecoder().decode(bytes)));
       if (cfg.a && cfg.via && cfg.b) {
         localStorage.setItem(LS_KEY, JSON.stringify(cfg));
         history.replaceState(null, '', location.pathname + location.search);
@@ -412,7 +449,7 @@ function loadConfig() {
   }
   const saved = localStorage.getItem(LS_KEY);
   if (saved) {
-    try { return { cfg: JSON.parse(saved), firstRun: false }; } catch (e) {}
+    try { return { cfg: normalizeConfig(JSON.parse(saved)), firstRun: false }; } catch (e) {}
   }
   return { cfg: JSON.parse(JSON.stringify(PRESET)), firstRun: true };
 }
@@ -453,9 +490,8 @@ async function fetchBoard() {
   const from = reversed ? config.b : config.a;
   const to   = reversed ? config.a : config.b;
   const via  = config.via;
-  const walkStart = reversed ? config.walkB : config.walkA;
-  const walkEnd   = reversed ? config.walkA : config.walkB;
-  const walkT = config.walkT;
+  const walks = reversed ? config.ret : config.out;
+  const walkStart = walks.start, walkEnd = walks.end, walkT = walks.transfer;
 
   const [dep1, arrVia, dep2, arrTo] = await Promise.all([
     api(`/stops/${from.id}/departures`, { direction: via.id, duration: 70, remarks: true, results: 15 }),
@@ -673,7 +709,7 @@ function renderBoard(data) {
             <span class="deptime">${fmtTime(whenOf(d))}</span>
             ${delayHtml(d)}
             ${r.cancelled ? '<span class="cancelflag">CANCELLED</span>' : relMinHtml(r)}
-            ${r.arrTo && !r.cancelled ? `<span class="arr">→ ${fmtTime(r.arrTo)}</span>` : ''}
+            ${r.arrTo && !r.cancelled ? `<span class="arr">→ ${fmtTime(r.arrTo)}${r.doorArr ? ` · ⌂ ${fmtTime(r.doorArr)}` : ''}</span>` : ''}
           </div>
           ${strand ? `<div class="strand">${strand}</div>` : ''}
           ${foot ? `<div class="cardfoot">${foot}</div>` : ''}
@@ -725,12 +761,12 @@ async function ensureCorridor(data) {
     const idx = id => sos.findIndex(s => s.stop.id === id || s.stop.station?.id === id);
     const iFrom = idx(data.from.id), iVia = idx(data.via.id);
     if (iFrom < 0 || iVia < 0 || iVia <= iFrom) { resetRadar(); return; }
-    const off = Math.max(0, iFrom - 5);
+    // track the whole route up to the transfer, so even rides 30+ minutes out are visible
     const k = Math.cos(sos[iFrom].stop.location.latitude * Math.PI / 180);
-    const stops = sos.slice(off, iVia + 1).map((s, i) => ({
+    const stops = sos.slice(0, iVia + 1).map((s, i) => ({
       name: shortName(s.stop.name),
       lat: s.stop.location.latitude, lng: s.stop.location.longitude,
-      isFrom: off + i === iFrom, cum: 0,
+      isFrom: i === iFrom, cum: 0,
     }));
     for (let i = 1; i < stops.length; i++) {
       const p = stops[i - 1], q = stops[i];
@@ -780,11 +816,11 @@ async function pollRadar() {
   radarBusy = true;
   try {
     const lats = corridor.stops.map(s => s.lat), lngs = corridor.stops.map(s => s.lng);
-    const m = 0.004;
+    const m = 0.003;
     const res = await api('/radar', {
       north: (Math.max(...lats) + m).toFixed(5), south: (Math.min(...lats) - m).toFixed(5),
       west: (Math.min(...lngs) - m).toFixed(5), east: (Math.max(...lngs) + m).toFixed(5),
-      results: 80, duration: 0, frames: 0, polylines: false,
+      results: 256, duration: 0, frames: 0, polylines: false,
     });
     const wanted = new Map();
     for (const r of lastData.rows) if (!r.cancelled) wanted.set(r.dep.tripId, r);
@@ -816,6 +852,10 @@ async function pollRadar() {
     for (const stale of track.querySelectorAll('.radar-dot')) {
       if (!seen.has(stale.getAttribute('data-trip'))) stale.remove();
     }
+    // stagger wait labels above/below the rail so neighbouring dots stay readable
+    [...track.querySelectorAll('.radar-dot')]
+      .sort((x, y) => parseFloat(x.style.left) - parseFloat(y.style.left))
+      .forEach((dEl, i) => dEl.classList.toggle('below', i % 2 === 1));
   } catch (e) { /* transient radar errors are fine */ }
   finally { radarBusy = false; }
 }
@@ -899,9 +939,12 @@ function setupStopField(key) {
 
 function openSettings() {
   pick.a = config.a; pick.via = config.via; pick.b = config.b;
-  $('#walkA').value = config.walkA;
-  $('#walkT').value = config.walkT;
-  $('#walkB').value = config.walkB;
+  $('#outStart').value = config.out.start;
+  $('#outXfer').value = config.out.transfer;
+  $('#outEnd').value = config.out.end;
+  $('#retStart').value = config.ret.start;
+  $('#retXfer').value = config.ret.transfer;
+  $('#retEnd').value = config.ret.end;
   for (const k of ['a', 'via', 'b']) {
     const root = $(`#f-${k}`);
     const fresh = root.querySelector('input').cloneNode(true);
@@ -918,11 +961,11 @@ function closeSettings() {
 }
 
 function currentEdit() {
+  const num = sel => Math.max(0, parseInt($(sel).value, 10) || 0);
   return {
     a: pick.a, via: pick.via, b: pick.b,
-    walkA: Math.max(0, parseInt($('#walkA').value, 10) || 0),
-    walkT: Math.max(0, parseInt($('#walkT').value, 10) || 0),
-    walkB: Math.max(0, parseInt($('#walkB').value, 10) || 0),
+    out: { start: num('#outStart'), transfer: num('#outXfer'), end: num('#outEnd') },
+    ret: { start: num('#retStart'), transfer: num('#retXfer'), end: num('#retEnd') },
   };
 }
 
