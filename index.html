@@ -133,36 +133,6 @@
   }
   .radar-dot.below .wl { top: auto; bottom: -17px; }
 
-  /* ———— time ruler ———— */
-  .ruler {
-    /* left/right margins line the ruler up with the strand column inside the cards:
-       16px card padding + 1px border + 64px wait column + 14px gap = 95 / 17 */
-    position: relative; height: 38px; margin: 2px 17px 10px 95px;
-    border-bottom: 1px solid var(--line);
-  }
-  .rcap {
-    position: absolute; top: 0; left: 0;
-    font-size: 9px; font-weight: 700; letter-spacing: .14em; color: var(--muted);
-  }
-  .tick {
-    position: absolute; bottom: 0; transform: translateX(-50%);
-    color: var(--muted); font-size: 10.5px; font-family: var(--mono);
-    padding-bottom: 7px;
-  }
-  .tick::after {
-    content: ""; position: absolute; left: 50%; bottom: -1px;
-    width: 1px; height: 5px; background: var(--line);
-  }
-  .nowflag {
-    position: absolute; bottom: 0; transform: translateX(-50%);
-    color: #161300; background: var(--yellow); font-size: 9.5px; font-weight: 700;
-    padding: 2px 6px; border-radius: 5px; letter-spacing: .08em;
-  }
-  .nowflag::after {
-    content: ""; position: absolute; left: 50%; top: 100%; transform: translateX(-50%);
-    border: 4px solid transparent; border-top-color: var(--yellow);
-  }
-
   /* ———— option cards / strands ———— */
   .card {
     background: var(--card); border: 1px solid var(--line); border-radius: 16px;
@@ -182,13 +152,23 @@
   .waitcol .num.dim { color: var(--muted); }
   .waitcol .lbl { display: block; font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
   .cardbody { min-width: 0; }
-  .cardtop { display: flex; align-items: baseline; gap: 10px; }
-  .cardtop .arr { margin-left: auto; font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+  .cardtop { display: flex; align-items: flex-start; gap: 12px; }
+  .tblock { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; min-width: 0; }
+  .tblock.tend { margin-left: auto; align-items: flex-end; }
+  .tlbl {
+    font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--muted); display: flex; align-items: center; gap: 5px;
+  }
+  .tlbl .linebadge { font-size: 10.5px; padding: 1px 6px; border-radius: 5px; }
+  .tval {
+    font-size: 18px; font-weight: 700; font-family: var(--mono); letter-spacing: -.02em;
+    display: flex; align-items: baseline; gap: 6px;
+  }
+  .tsub { font-size: 11px; color: var(--muted); font-family: var(--mono); }
   .linebadge {
     font-weight: 700; font-size: 13px; padding: 3px 9px; border-radius: 7px; color: #fff;
     align-self: center; flex-shrink: 0; letter-spacing: .02em;
   }
-  .deptime { font-size: 19px; font-weight: 700; font-family: var(--mono); letter-spacing: -.03em; }
   .delay { font-size: 12.5px; font-weight: 700; font-family: var(--mono); padding: 1px 6px; border-radius: 6px; }
   .delay.late  { color: var(--red);   background: rgba(255,93,93,.12); }
   .delay.early { color: var(--green); background: rgba(61,220,132,.12); }
@@ -209,14 +189,6 @@
   .dot {
     position: absolute; top: 13px; width: 10px; height: 10px; border-radius: 50%;
     background: var(--bg); border: 2.5px solid #fff; transform: translate(-50%, 0); z-index: 2;
-  }
-  .nowline {
-    position: absolute; top: 2px; bottom: 2px; width: 0; z-index: 1;
-    border-left: 1px dashed rgba(240,215,34,.4);
-  }
-  .gridline {
-    position: absolute; top: 0; bottom: 0; width: 0;
-    border-left: 1px solid rgba(255,255,255,.05);
   }
   .conlabel {
     position: absolute; top: 28px; z-index: 2; white-space: nowrap;
@@ -384,7 +356,6 @@
       <div class="radar-head"><span class="rdot"></span> LIVE — YOUR RIDES ON THE TRACKS</div>
       <div class="radar-track" id="radarTrack"></div>
     </div>
-    <div id="ruler" class="ruler" style="display:none"></div>
     <div id="board" aria-live="polite"></div>
   </div>
 
@@ -437,7 +408,6 @@ let config = null;          // {a,via,b,walkA,walkT,walkB}
 let reversed = localStorage.getItem(LS_DIR) === '1';
 let lastUpdated = null;
 let lastData = null;
-let scale = null;           // {tMin, span, pad, W}
 let loading = false;
 let hadFirstPaint = false;
 
@@ -583,7 +553,7 @@ function relState(leaveByMs, depMs) {
     const diff = (leaveByMs - now) / 60000;
     if (diff <= 1.2 && diff > -1.2) return { txt: 'leave now', urgent: true };
     if (diff <= -1.2) return { txt: 'hurry', urgent: false };
-    return { txt: `🚪 in ${Math.ceil(diff)}′`, urgent: false };
+    return { txt: `in ${Math.ceil(diff)}′`, urgent: false };
   }
   const m = Math.max(0, Math.round((depMs - now) / 60000));
   return { txt: `in ${m}′`, urgent: false };
@@ -616,11 +586,9 @@ function renderBoard(data) {
   } else { al.style.display = 'none'; }
 
   const board = $('#board');
-  const ruler = $('#ruler');
   const rows = data.rows.filter(r => new Date(whenOf(r.dep)).getTime() > Date.now() - 45000);
 
   if (!rows.length) {
-    ruler.style.display = 'none';
     board.innerHTML = '<div class="msg">No departures toward your transfer station in the next ~70 minutes.</div>';
     return;
   }
@@ -635,31 +603,14 @@ function renderBoard(data) {
   }
   const tMin = now - 3 * 60000;
   tMax += 3 * 60000;
-  // strand column geometry — offsets must match the CSS (.card grid + .ruler margins)
+  // strand column geometry — offsets must match the CSS card grid:
+  // 16px card padding + 1px border + 64px wait column + 14px gap = 95 / 17
   const OFF_L = 95, OFF_R = 17;
   const pad = 10;
   const boardW = board.clientWidth || 560;
   const W = Math.max(220, boardW - OFF_L - OFF_R);
   const span = tMax - tMin;
-  scale = { tMin, span, pad, W };
   const x = t => pad + ((new Date(t).getTime() - tMin) / span) * (W - 2 * pad);
-
-  // —— ruler ——
-  const spanMin = span / 60000;
-  const pxPerMin = (W - 2 * pad) / spanMin;
-  const step = [5, 10, 15, 20, 30, 60].find(s => s * pxPerMin >= 48) || 60;
-  let ticks = '<div class="rcap">TIMELINE →</div>';
-  const tickXs = [];
-  const first = new Date(Math.ceil(tMin / (step * 60000)) * step * 60000);
-  for (let t = first.getTime(); t < tMax; t += step * 60000) {
-    const tx = x(t);
-    tickXs.push(tx);
-    ticks += `<div class="tick" style="left:${tx.toFixed(1)}px">${fmtTime(new Date(t).toISOString())}</div>`;
-  }
-  ticks += `<div class="nowflag" data-now style="left:${x(now).toFixed(1)}px">NOW</div>`;
-  ruler.innerHTML = ticks;
-  ruler.style.display = '';
-  const gridHtml = tickXs.map(tx => `<div class="gridline" style="left:${tx.toFixed(1)}px"></div>`).join('');
 
   // —— cards: chronological; the shortest wait (earliest on tie) is highlighted in place ——
   let bestRow = null;
@@ -700,9 +651,6 @@ function renderBoard(data) {
       } else {
         foot = `arrives ${esc(shortName(data.via.name))} ${fmtTime(r.arrVia)} — no onward departure found`;
       }
-      const xNow = x(now);
-      if (xNow > pad - 1 && xNow < W - pad + 1)
-        strand += `<div class="nowline" data-now style="left:${xNow.toFixed(1)}px"></div>`;
     } else if (!r.cancelled) {
       foot = `couldn’t determine arrival at ${esc(shortName(data.via.name))}`;
     }
@@ -711,19 +659,32 @@ function renderBoard(data) {
       ? `<span class="num wtxt-${waitClass(r.waitMin).slice(2)}">${r.waitMin}′</span><span class="lbl">wait</span>`
       : `<span class="num dim">—</span>`;
 
+    const leaveBlock = r.leaveBy && !r.cancelled ? `
+          <div class="tblock">
+            <span class="tlbl">🚪 leave</span>
+            <span class="tval">${fmtTime(r.leaveBy)}</span>
+            ${relMinHtml(r)}
+          </div>` : '';
+    const departsBlock = `
+          <div class="tblock">
+            <span class="tlbl"><span class="linebadge" style="background:${c1}">${esc(d.line?.name || '?')}</span> departs</span>
+            <span class="tval">${fmtTime(whenOf(d))}${delayHtml(d)}</span>
+            ${r.cancelled ? '<span class="cancelflag">CANCELLED</span>' : (leaveBlock ? '' : relMinHtml(r))}
+          </div>`;
+    const arriveBlock = r.cancelled ? '' : `
+          <div class="tblock tend">
+            <span class="tlbl">arrive</span>
+            <span class="tval">${r.arrTo ? fmtTime(r.arrTo) : '—'}</span>
+            ${r.doorArr ? `<span class="tsub">⌂ ${fmtTime(r.doorArr)}</span>` : ''}
+          </div>`;
+
     return `
       <article class="card ${isBest ? 'best' : ''} ${r.cancelled ? 'cancelled' : ''}">
         ${isBest ? '<div class="badge-best">SHORTEST WAIT</div>' : ''}
         <div class="waitcol">${waitcol}</div>
         <div class="cardbody">
-          <div class="cardtop">
-            <span class="linebadge" style="background:${c1}">${esc(d.line?.name || '?')}</span>
-            <span class="deptime">${fmtTime(whenOf(d))}</span>
-            ${delayHtml(d)}
-            ${r.cancelled ? '<span class="cancelflag">CANCELLED</span>' : relMinHtml(r)}
-            ${r.arrTo && !r.cancelled ? `<span class="arr">→ ${fmtTime(r.arrTo)}${r.doorArr ? ` · ⌂ ${fmtTime(r.doorArr)}` : ''}</span>` : ''}
-          </div>
-          ${strand ? `<div class="strand">${gridHtml}${strand}</div>` : ''}
+          <div class="cardtop">${leaveBlock}${departsBlock}${arriveBlock}</div>
+          ${strand ? `<div class="strand">${strand}</div>` : ''}
           ${foot ? `<div class="cardfoot">${foot}</div>` : ''}
         </div>
       </article>`;
@@ -732,11 +693,6 @@ function renderBoard(data) {
 }
 
 function updateNowMarkers() {
-  if (!scale) return;
-  const { tMin, span, pad, W } = scale;
-  const left = pad + ((Date.now() - tMin) / span) * (W - 2 * pad);
-  if (left > W - pad) { if (lastData) renderBoard(lastData); return; }
-  document.querySelectorAll('[data-now]').forEach(el2 => { el2.style.left = left.toFixed(1) + 'px'; });
   document.querySelectorAll('.relmin').forEach(el2 => {
     const r = relState(Number(el2.dataset.leaveby) || null, Number(el2.dataset.dep));
     el2.textContent = r.txt;
@@ -883,7 +839,6 @@ async function refresh() {
     ensureCorridor(data);
     pollRadar();
   } catch (e) {
-    $('#ruler').style.display = 'none';
     $('#board').innerHTML = `<div class="msg error">Could not load live data.<br>${esc(e.message)}
       <button onclick="window.__retry()">try again</button></div>`;
     hadFirstPaint = false;

@@ -14,8 +14,9 @@ a glance.
 
 ## Features
 
-- 🎨 **Marey-style journey timeline** — each option is a strand on one shared time scale with a
-  live "NOW" line sweeping across; the transfer wait is literally a gap you can see
+- 🎨 **Journey strands** — every option shows explicit *leave / departs / arrive* times and is
+  drawn as a strand: ride → transfer wait (a hatched, color-coded gap you can literally see)
+  → onward ride
 - 🟢 **Wait-first UI** — the recommended ride is a hero card with its wait as a giant number
   ("take this one"); every other option shows its wait as a big color-coded stat
   (green ≤ 2 min, amber 3–4, red ≥ 5) for at-a-glance comparison
@@ -62,8 +63,7 @@ well within its 100 req/min limit):
 4. `GET /stops/{destination}/arrivals` — matched by `tripId` for the final arrival time
 
 All four run in parallel; real-time `when` is preferred, planned times are the fallback.
-The timeline scale is computed per refresh, re-laid-out on resize, and the NOW markers
-advance between refreshes.
+The strand scale is computed per refresh and re-laid-out on resize.
 
 The live radar additionally fetches the first leg's stop sequence once (`GET /trips/{tripId}`)
 to build a geographic corridor, then polls `GET /radar` (bounding box around the corridor)
