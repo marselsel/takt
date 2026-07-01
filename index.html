@@ -202,6 +202,7 @@
 
   .msg { text-align: center; color: var(--muted); padding: 36px 14px; font-size: 14px; line-height: 1.7; }
   .msg.error { color: var(--red); }
+  .msg code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; opacity: .85; word-break: break-all; }
   .msg button {
     display: block; margin: 14px auto 0; background: var(--yellow); border: none; color: #161300;
     font-family: inherit; font-weight: 700; font-size: 14px; padding: 10px 22px; border-radius: 10px; cursor: pointer;
@@ -452,8 +453,22 @@ const shortName = n => String(n || '').replace(/ \(Berlin\)$/, '');
 async function api(path, params) {
   const url = new URL(API + path);
   for (const [k, v] of Object.entries(params || {})) url.searchParams.set(k, v);
-  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-  if (!res.ok) throw new Error('API error ' + res.status + ' for ' + path);
+  let res;
+  try {
+    res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+  } catch (e) {
+    // network failure / timeout — the data server is unreachable
+    const err = new Error('Could not reach the live-data server (' + (e.message || 'network error') + ').');
+    err.outage = true;
+    throw err;
+  }
+  if (!res.ok) {
+    const err = new Error('API error ' + res.status + ' for ' + path);
+    err.status = res.status;
+    // 5xx and rate-limiting mean the data server is down/overloaded, not our request
+    err.outage = res.status >= 500 || res.status === 429;
+    throw err;
+  }
   return res.json();
 }
 
@@ -839,8 +854,15 @@ async function refresh() {
     ensureCorridor(data);
     pollRadar();
   } catch (e) {
-    $('#board').innerHTML = `<div class="msg error">Could not load live data.<br>${esc(e.message)}
-      <button onclick="window.__retry()">try again</button></div>`;
+    $('#board').innerHTML = e.outage
+      ? `<div class="msg error"><strong>Berlin's live-data server is down.</strong><br>
+          TAKT reads live times from the free public server
+          <code>v6.bvg.transport.rest</code>, which isn't responding right now — that's an
+          outage on their side, not your connection or settings. Departures will reappear on
+          their own once it's back; TAKT keeps retrying every minute.
+          <button onclick="window.__retry()">try again now</button></div>`
+      : `<div class="msg error">Could not load live data.<br>${esc(e.message)}
+          <button onclick="window.__retry()">try again</button></div>`;
     hadFirstPaint = false;
   } finally {
     loading = false;
