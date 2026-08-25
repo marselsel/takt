@@ -108,12 +108,15 @@
   /* ———— floating top bar: content scrolls under it ———— */
   .top {
     position: sticky; top: 0; z-index: 20;
+    background: transparent;                 /* no material until content actually scrolls under it — avoids a hard edge over the page glow */
+    padding-top: env(safe-area-inset-top);
+    transition: background-color .25s, box-shadow .25s;
+  }
+  .top.scrolled {
     background: var(--bar);
     -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%);
-    padding-top: env(safe-area-inset-top);
-    transition: box-shadow .25s;
+    box-shadow: var(--shadow-bar);
   }
-  .top.scrolled { box-shadow: var(--shadow-bar); }
   .top-in { max-width: 600px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; }
   .wordmark { font-size: 26px; font-weight: 800; letter-spacing: -.045em; line-height: 1; user-select: none; }
   .wordmark .block { display: inline-block; width: .38em; height: .74em; margin-left: .1em; background: var(--accent); vertical-align: baseline; border-radius: 1px; }
@@ -338,7 +341,7 @@
     transition: background-color .3s var(--ease), color .3s var(--ease), border-color .3s var(--ease), box-shadow .3s var(--ease), fill .3s var(--ease) !important;
   }
   @media (prefers-reduced-transparency: reduce) {
-    .top { background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none; }
+    .top.scrolled { background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none; }
     .scrim { background: rgba(4,6,10,.85); -webkit-backdrop-filter: none; backdrop-filter: none; }
   }
   @media (prefers-reduced-motion: reduce) {
