@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0a0c12">
-<meta name="color-scheme" content="dark">
+<meta name="color-scheme" content="dark light">
 <meta name="description" content="TAKT — a live Berlin transfer timer. See exactly which tram, U-Bahn or bus to catch for the shortest wait at your transfer station, drawn as a living timetable.">
 <meta property="og:title" content="TAKT — never wait at the platform again">
 <meta property="og:description" content="Live BVG/VBB transfer planner: every option drawn on a time axis, the wait visible as a gap. Pick the ride with the shortest one.">
@@ -12,6 +12,14 @@
 <title>TAKT — Berlin transfer timer</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
+<script>
+  // theme is chosen before the stylesheet applies, so there is no flash of the wrong scheme
+  (function () {
+    var s = null; try { s = localStorage.getItem('takt-theme'); } catch (e) {}
+    var t = s === 'light' || s === 'dark' ? s : (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
 <style>
   :root {
     --bg: #0a0c12;
@@ -23,22 +31,59 @@
     --text-2: #aab1c2;
     --text-3: #737b8f;
     --accent: #f0d722;
+    --accent-ink: #f0d722;      /* accent used as text/border; darkened in light mode for contrast */
     --on-accent: #161300;
     --green: #35d97c;
     --amber: #ffb230;
     --red: #ff5f5f;
+    --bar: rgba(10,12,18,.72);
+    --scrim: rgba(4,6,10,.62);
+    --tick: rgba(255,255,255,.16);
+    --hover: rgba(255,255,255,.06);
+    --shimmer: rgba(255,255,255,.045);
+    --glow: rgba(240,215,34,.07);
+    --shadow-bar: 0 1px 0 var(--hair), 0 10px 30px rgba(0,0,0,.28);
+    --shadow-pop: 0 12px 32px rgba(0,0,0,.45);
+    --shadow-sheet: 0 -24px 60px rgba(0,0,0,.5);
+    --shadow-dialog: 0 30px 80px rgba(0,0,0,.6);
     --r-lg: 22px;
     --r-md: 14px;
     --r-sm: 8px;
     --ease: cubic-bezier(.2,.8,.2,1);
     --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, system-ui, sans-serif;
   }
+  :root[data-theme="light"] {
+    --bg: #f3f4f7;
+    --surface: #ffffff;
+    --surface-2: #eceef3;
+    --hair: rgba(16,20,30,.08);
+    --hair-2: rgba(16,20,30,.15);
+    --text: #12151c;
+    --text-2: #4d5464;
+    --text-3: #6b7385;
+    --accent-ink: #8a6d00;
+    --green: #158a4b;
+    --amber: #a8690a;
+    --red: #d0323a;
+    --bar: rgba(243,244,247,.78);
+    --scrim: rgba(20,24,32,.4);
+    --tick: rgba(16,20,30,.16);
+    --hover: rgba(16,20,30,.05);
+    --shimmer: rgba(16,20,30,.05);
+    --glow: rgba(240,215,34,.18);
+    --shadow-bar: 0 1px 0 var(--hair), 0 10px 30px rgba(20,24,32,.08);
+    --shadow-pop: 0 12px 32px rgba(20,24,32,.18);
+    --shadow-sheet: 0 -24px 60px rgba(20,24,32,.18);
+    --shadow-dialog: 0 30px 80px rgba(20,24,32,.25);
+  }
   @media (prefers-contrast: more) {
     :root { --hair: rgba(255,255,255,.28); --hair-2: rgba(255,255,255,.4); --text-3: #9aa3b5; --text-2: #c3c9d6; }
+    :root[data-theme="light"] { --hair: rgba(16,20,30,.3); --hair-2: rgba(16,20,30,.45); --text-3: #4d5464; --text-2: #2c3140; }
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html { -webkit-text-size-adjust: 100%; color-scheme: dark; }
+  html[data-theme="light"] { color-scheme: light; }
   body {
     background: var(--bg);
     color: var(--text);
@@ -53,22 +98,22 @@
   body.locked { overflow: hidden; }
   body::before {
     content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
-    background: radial-gradient(900px 480px at 50% -12%, rgba(240,215,34,.07), transparent 65%);
+    background: radial-gradient(900px 480px at 50% -12%, var(--glow), transparent 65%);
   }
   button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; -webkit-tap-highlight-color: transparent; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  :focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
   .tnum { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
   .wrap { max-width: 600px; margin: 0 auto; padding: 0 16px; }
 
   /* ———— floating top bar: content scrolls under it ———— */
   .top {
     position: sticky; top: 0; z-index: 20;
-    background: rgba(10,12,18,.72);
+    background: var(--bar);
     -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%);
     padding-top: env(safe-area-inset-top);
     transition: box-shadow .25s;
   }
-  .top.scrolled { box-shadow: 0 1px 0 var(--hair), 0 10px 30px rgba(0,0,0,.28); }
+  .top.scrolled { box-shadow: var(--shadow-bar); }
   .top-in { max-width: 600px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; }
   .wordmark { font-size: 26px; font-weight: 800; letter-spacing: -.045em; line-height: 1; user-select: none; }
   .wordmark .block { display: inline-block; width: .38em; height: .74em; margin-left: .1em; background: var(--accent); vertical-align: baseline; border-radius: 1px; }
@@ -81,6 +126,9 @@
   .icon:hover { background: var(--surface-2); color: var(--text); }
   .icon:active { scale: .92; }
   .icon svg { width: 20px; height: 20px; }
+  .ico-moon { display: none; }
+  [data-theme="light"] .ico-sun { display: none; }
+  [data-theme="light"] .ico-moon { display: block; }
   .icon.busy svg { animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   svg.i { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -91,7 +139,7 @@
   .route-title { font-size: 24px; font-weight: 700; letter-spacing: -.02em; line-height: 1.15; overflow-wrap: anywhere; }
   .route-title .stop { display: inline-block; }
   @media (max-width: 400px) { .route-title { font-size: 22px; } }
-  .route-title .arr { color: var(--accent); font-weight: 500; margin: 0 6px; }
+  .route-title .arr { color: var(--accent-ink); font-weight: 500; margin: 0 6px; }
   .route-sub { margin-top: 4px; font-size: 14px; color: var(--text-2); }
   .route-sub b { color: var(--text); font-weight: 600; }
   .status { margin-top: 8px; font-size: 12.5px; color: var(--text-3); display: flex; align-items: center; gap: 7px; }
@@ -127,9 +175,9 @@
   .radar-track { position: relative; height: 72px; margin-top: 4px; }
   .radar-track.rows2 { height: 86px; }
   .rrail { position: absolute; left: 0; right: 0; top: 34px; height: 2px; background: var(--hair-2); border-radius: 1px; }
-  .rtick { position: absolute; top: 30px; width: 2px; height: 10px; background: rgba(255,255,255,.16); transform: translateX(-50%); }
+  .rtick { position: absolute; top: 30px; width: 2px; height: 10px; background: var(--tick); transform: translateX(-50%); }
   .rtick.major { background: var(--text); height: 12px; top: 29px; }
-  .rtick.via2 { background: var(--accent); }
+  .rtick.via2 { background: var(--accent-ink); }
   .rlbl {
     position: absolute; top: 56px; transform: translateX(-50%);
     font-size: 11px; color: var(--text-3); white-space: nowrap; max-width: 46%;
@@ -141,7 +189,7 @@
   .radar-dot {
     position: absolute; top: 29px; width: 12px; height: 12px; border-radius: 50%;
     border: 2px solid #fff; transform: translateX(-50%); z-index: 2;
-    transition: left 4s var(--ease); box-shadow: 0 2px 8px rgba(0,0,0,.5);
+    transition: left 4s var(--ease); box-shadow: 0 2px 8px rgba(0,0,0,.35);
   }
   .radar-dot .wl { position: absolute; top: -17px; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 700; }
   .radar-dot.below .wl { top: auto; bottom: -16px; }
@@ -154,8 +202,8 @@
     padding: 16px 18px 12px; margin-bottom: 10px;
     display: grid; grid-template-columns: 72px 1fr; column-gap: 16px; align-items: center;
   }
-  .card.best { background: color-mix(in srgb, var(--accent) 6%, var(--surface)); border-color: rgba(240,215,34,.38); }
-  .best-tag { grid-column: 1 / -1; display: flex; align-items: center; gap: 5px; color: var(--accent); font-size: 12px; font-weight: 600; margin: -4px 0 10px; }
+  .card.best { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); border-color: color-mix(in srgb, var(--accent-ink) 45%, transparent); }
+  .best-tag { grid-column: 1 / -1; display: flex; align-items: center; gap: 5px; color: var(--accent-ink); font-size: 12px; font-weight: 600; margin: -4px 0 10px; }
   .best-tag svg { width: 12px; height: 12px; fill: currentColor; }
   .w-green { color: var(--green); } .w-amber { color: var(--amber); } .w-red { color: var(--red); }
   .wait { text-align: center; line-height: 1; }
@@ -201,7 +249,7 @@
   .skel { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-lg); height: 118px; margin-bottom: 10px; overflow: hidden; position: relative; }
   .skel::after {
     content: ""; position: absolute; inset: 0;
-    background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.045) 50%, transparent 70%);
+    background: linear-gradient(100deg, transparent 30%, var(--shimmer) 50%, transparent 70%);
     animation: shimmer 1.4s infinite;
   }
   @keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
@@ -209,13 +257,13 @@
   /* ———— settings sheet ———— */
   .sheetwrap { position: fixed; inset: 0; z-index: 50; }
   .sheetwrap[hidden] { display: none; }
-  .scrim { position: absolute; inset: 0; background: rgba(4,6,10,.62); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+  .scrim { position: absolute; inset: 0; background: var(--scrim); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
   .sheet {
     position: absolute; left: 0; right: 0; bottom: 0; width: 100%;
     max-height: calc(100dvh - 24px - env(safe-area-inset-top));
     background: var(--surface); border: 1px solid var(--hair-2); border-bottom: 0;
     border-radius: var(--r-lg) var(--r-lg) 0 0;
-    box-shadow: 0 -24px 60px rgba(0,0,0,.5);
+    box-shadow: var(--shadow-sheet);
     display: flex; flex-direction: column; outline: none; will-change: transform;
   }
   .grabzone { flex-shrink: 0; padding: 10px 0 4px; cursor: grab; touch-action: none; user-select: none; }
@@ -226,7 +274,7 @@
     .sheet {
       bottom: auto; top: 50%; left: 50%; right: auto; width: 520px; translate: -50% -50%;
       max-height: calc(100dvh - 48px); border-radius: var(--r-lg); border-bottom: 1px solid var(--hair-2);
-      box-shadow: 0 30px 80px rgba(0,0,0,.6);
+      box-shadow: var(--shadow-dialog);
     }
     .grabber { display: none; }
     .grabzone { padding-top: 14px; }
@@ -240,7 +288,7 @@
     border-radius: var(--r-md); padding: 12px 14px; font: inherit; font-size: 16px;
     -webkit-appearance: none; appearance: none; transition: border-color .15s, box-shadow .15s;
   }
-  .field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(240,215,34,.18); }
+  .field input:focus { outline: none; border-color: var(--accent-ink); box-shadow: 0 0 0 3px rgba(240,215,34,.22); }
   .field.invalid input { border-color: var(--red); box-shadow: 0 0 0 3px rgba(255,95,95,.16); }
   .field .picked { font-size: 12px; color: var(--green); margin-top: 6px; min-height: 15px; }
   .field .picked.none { color: var(--text-3); }
@@ -248,11 +296,11 @@
   .suggest {
     position: absolute; left: 0; right: 0; top: calc(100% - 20px); z-index: 60;
     background: var(--surface-2); border: 1px solid var(--hair-2); border-radius: var(--r-md);
-    max-height: 224px; overflow-y: auto; box-shadow: 0 16px 40px rgba(0,0,0,.5);
+    max-height: 224px; overflow-y: auto; box-shadow: var(--shadow-pop);
   }
   .suggest div { padding: 11px 14px; font-size: 15px; cursor: pointer; border-bottom: 1px solid var(--hair); }
   .suggest div:last-child { border-bottom: 0; }
-  .suggest div:hover, .suggest div.active { background: rgba(255,255,255,.06); }
+  .suggest div:hover, .suggest div.active { background: var(--hover); }
   .walksec { margin-top: 6px; }
   .walksec h3 { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
   .walksec h3 span { color: var(--text-3); font-weight: 400; }
@@ -266,8 +314,8 @@
   .btn:active { scale: .97; }
   .btn.primary { background: var(--accent); color: var(--on-accent); }
   .btn.ghost { background: var(--surface-2); color: var(--text); border: 1px solid var(--hair-2); }
-  .linkbtn { display: flex; align-items: center; gap: 6px; margin: 12px auto 0; color: var(--accent); font-size: 13.5px; font-weight: 500; padding: 8px 14px; border-radius: 999px; }
-  .linkbtn:hover { background: rgba(240,215,34,.08); }
+  .linkbtn { display: flex; align-items: center; gap: 6px; margin: 12px auto 0; color: var(--accent-ink); font-size: 13.5px; font-weight: 500; padding: 8px 14px; border-radius: 999px; }
+  .linkbtn:hover { background: rgba(240,215,34,.12); }
   .linkbtn svg { width: 15px; height: 15px; }
   #shareOut { margin-top: 8px; font-size: 12px; }
 
@@ -276,7 +324,7 @@
     transform: translateY(14px); opacity: 0; pointer-events: none;
     background: var(--surface-2); border: 1px solid var(--hair-2); color: var(--text);
     padding: 10px 16px; border-radius: 999px; font-size: 13.5px; font-weight: 500; white-space: nowrap;
-    box-shadow: 0 12px 32px rgba(0,0,0,.45);
+    box-shadow: var(--shadow-pop);
     transition: transform .32s var(--ease), opacity .22s;
   }
   .toast.show { transform: none; opacity: 1; }
@@ -286,6 +334,9 @@
   footer a:hover { color: var(--text); }
   footer .ghlink { display: inline-flex; vertical-align: middle; }
 
+  html.theming, html.theming *, html.theming *::before, html.theming *::after {
+    transition: background-color .3s var(--ease), color .3s var(--ease), border-color .3s var(--ease), box-shadow .3s var(--ease), fill .3s var(--ease) !important;
+  }
   @media (prefers-reduced-transparency: reduce) {
     .top { background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none; }
     .scrim { background: rgba(4,6,10,.85); -webkit-backdrop-filter: none; backdrop-filter: none; }
@@ -301,6 +352,10 @@
   <div class="top-in">
     <div class="wordmark" aria-label="TAKT">TAKT<span class="block"></span></div>
     <div class="actions">
+      <button class="icon" id="btnTheme" title="Switch to light mode" aria-label="Switch to light mode">
+        <svg class="i ico-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+        <svg class="i ico-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7z"/></svg>
+      </button>
       <button class="icon" id="btnRefresh" title="Refresh" aria-label="Refresh">
         <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
       </button>
@@ -1233,6 +1288,33 @@ $('#btnSwap').addEventListener('click', () => {
   refresh({ force: true });
 });
 $('#btnRefresh').addEventListener('click', () => refresh());
+
+/* ---------------- theme: follows the system until the toggle is used ---------------- */
+const THEME_KEY = 'takt-theme';
+const THEME_COLORS = { dark: '#0a0c12', light: '#f3f4f7' };
+function applyTheme(t, animate) {
+  const root = document.documentElement;
+  if (animate && !reduceMotion.matches) {
+    root.classList.add('theming');
+    setTimeout(() => root.classList.remove('theming'), 350);
+  }
+  root.setAttribute('data-theme', t);
+  document.querySelector('meta[name="theme-color"]').content = THEME_COLORS[t];
+  const btn = $('#btnTheme');
+  btn.title = t === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+  btn.setAttribute('aria-label', btn.title);
+}
+$('#btnTheme').addEventListener('click', () => {
+  const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+  applyTheme(next, true);
+});
+matchMedia('(prefers-color-scheme: light)').addEventListener('change', e => {
+  let stored = null;
+  try { stored = localStorage.getItem(THEME_KEY); } catch (err) {}
+  if (stored !== 'light' && stored !== 'dark') applyTheme(e.matches ? 'light' : 'dark', true);
+});
+applyTheme(document.documentElement.getAttribute('data-theme') || 'dark', false);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') refresh();
 });
